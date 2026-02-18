@@ -1,0 +1,12 @@
+README.md
+setup.py
+football_alert/__init__.py
+football_alert/api.py
+football_alert/cli.py
+football_alert/monitor.py
+football_alert.egg-info/PKG-INFO
+football_alert.egg-info/SOURCES.txt
+football_alert.egg-info/dependency_links.txt
+football_alert.egg-info/entry_points.txt
+football_alert.egg-info/requires.txt
+football_alert.egg-info/top_level.txt
