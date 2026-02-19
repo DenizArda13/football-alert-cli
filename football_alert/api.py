@@ -1,5 +1,5 @@
 import time
-from .mock_server import start_mock_server
+from .mock_server import start_mock_server, generate_mock_stats
 
 # Use local mock server to eliminate external network dependencies
 # Original RapidAPI URL replaced for compliance
@@ -10,9 +10,8 @@ API_URL = "http://127.0.0.1:5000/fixtures/statistics"
 # without it when using mock=True mode
 _mock_server_started = False
 
-# Module-level state for in-memory mock (when mock=True) to provide cumulative, non-decreasing stats
-# Mirrors mock_server.py for consistency, ensuring multi-stat AND conditions don't cause stuck loops
-_in_memory_progress = {}
+# Global flag only for server start; in-memory mock now delegates to generate_mock_stats()
+# from mock_server.py (single source of truth for cumulative stats + elapsed minute)
 
 def get_headers():
     """
@@ -24,47 +23,29 @@ def get_headers():
 
 def fetch_match_stats(fixture_id, mock=False):
     """
-    Fetches statistics for a given fixture from the local mock server.
+    Fetches statistics AND elapsed minute for a given fixture from the local mock server.
+    Updated to support reporting the match minute when all stats thresholds are reached.
+    Returns: tuple (stats_list, elapsed_minute)  [BREAKING for callers; see monitor.py updates]
+    
     This eliminates any external network dependencies to RapidAPI.
     
     The mock parameter is retained for backward compatibility with CLI:
-    - If mock=True: Returns in-memory simulated data (fast, no HTTP).
-    - If mock=False (default): Uses local stdlib mock server via HTTP for full API compatibility.
+    - If mock=True: Delegates to generate_mock_stats() for in-memory simulated data (fast, no HTTP).
+      (Removed separate _in_memory_progress to avoid duplication; uses server's module state.)
+    - If mock=False (default): Uses local stdlib mock server via HTTP for full API compatibility
+      (now includes 'elapsed' in JSON).
     
     The local server is started automatically on first call if needed.
+    Elapsed minute simulates match time (advances ~5 min per poll, caps at 90) for alert timing.
     """
     global _mock_server_started
 
-    # For mock=True, use in-memory simulation for tests/CLI --mock (fast, no HTTP)
-    # Updated to cumulative progression (mirrors server) to ensure reliable multi-stat AND
-    # Prevents oscillating values that could prevent all conditions being met in one poll
+    # For mock=True, use in-memory simulation via shared generator (fast, no HTTP)
+    # Mirrors mock_server.py exactly for cumulative progression + elapsed minute
+    # Ensures reliable multi-stat AND triggering and accurate minute in alerts
+    # (Previously duplicated; now DRY for consistency)
     if mock:
-        # Increment progress for this fixture
-        if fixture_id not in _in_memory_progress:
-            _in_memory_progress[fixture_id] = 0
-        _in_memory_progress[fixture_id] += 1
-        progress = _in_memory_progress[fixture_id]
-
-        # base_val ramps up to 15 and stabilizes (non-decreasing)
-        base_val = min(progress, 15)
-        return [
-            {
-                "team": {"name": "Home Team"},
-                "statistics": [
-                    {"type": "Corners", "value": base_val},
-                    {"type": "Total Shots", "value": base_val + 2},
-                    {"type": "Goals", "value": base_val // 3}
-                ]
-            },
-            {
-                "team": {"name": "Away Team"},
-                "statistics": [
-                    {"type": "Corners", "value": max(0, base_val - 1)},
-                    {"type": "Total Shots", "value": base_val + 1},
-                    {"type": "Goals", "value": base_val // 4}
-                ]
-            }
-        ]
+        return generate_mock_stats(fixture_id)  # returns (stats, elapsed)
 
     # Ensure local mock server is running for non-mock mode (now always local)
     if not _mock_server_started:
@@ -84,25 +65,15 @@ def fetch_match_stats(fixture_id, mock=False):
         response = requests.get(API_URL, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
-        return data.get("response", [])
+        # Extract stats (as before) and new elapsed minute for alert timing
+        # 'elapsed' added by updated mock server/do_GET
+        # Fallback to 0 if missing (for robustness)
+        stats = data.get("response", [])
+        elapsed = data.get("elapsed", 0)
+        return stats, elapsed
     except requests.RequestException as e:
         print(f"Error fetching data from local mock server: {e}")
-        # Fallback to in-memory mock if server issue
-        return [
-            {
-                "team": {"name": "Home Team"},
-                "statistics": [
-                    {"type": "Corners", "value": 0},
-                    {"type": "Total Shots", "value": 2},
-                    {"type": "Goals", "value": 0}
-                ]
-            },
-            {
-                "team": {"name": "Away Team"},
-                "statistics": [
-                    {"type": "Corners", "value": 0},
-                    {"type": "Total Shots", "value": 1},
-                    {"type": "Goals", "value": 0}
-                ]
-            }
-        ]
+        # Fallback to in-memory mock if server issue (now includes elapsed=0)
+        # Uses generator for consistency (advances progress but rare in error case)
+        # Alternatively could hardcode, but ensures minute reported
+        return generate_mock_stats(fixture_id)  # (stats, elapsed) even on error fallback

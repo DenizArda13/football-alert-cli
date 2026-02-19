@@ -17,6 +17,7 @@ def generate_mock_stats(fixture_id):
     Generates simulated statistics similar to the original mock.
     Uses cumulative progression for demo purposes to simulate changing (non-decreasing) stats.
     Ensures multi-stat conditions can reliably be met over time without stuck loops.
+    Now includes elapsed minute for alerts (advances ~5 min per poll for quick demo; caps at 90).
     """
     # Increment progress for this fixture (persistent across calls/polls)
     if fixture_id not in _fixture_progress:
@@ -27,7 +28,13 @@ def generate_mock_stats(fixture_id):
     # base_val ramps up to 15 then stabilizes (ensures >= typical targets like 1-10)
     # Non-decreasing guarantees eventual all-met for AND in same poll
     base_val = min(progress, 15)
-    return [
+
+    # Elapsed minute: simulates match time progression (e.g., 5 min per poll for demo)
+    # This enables reporting the minute when all thresholds are reached in alerts
+    # Caps at 90 for realistic full match
+    elapsed = min(progress * 5, 90)
+
+    stats = [
         {
             "team": {"name": "Home Team"},
             "statistics": [
@@ -45,6 +52,7 @@ def generate_mock_stats(fixture_id):
             ]
         }
     ]
+    return stats, elapsed
 
 
 class MockAPIHandler(BaseHTTPRequestHandler):
@@ -62,17 +70,25 @@ class MockAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        """Handle GET requests to the mock endpoint."""
+        """Handle GET requests to the mock endpoint.
+        Now includes 'elapsed' minute in top-level response for match time tracking.
+        Updated generate_mock_stats returns (stats, elapsed) to support minute in alerts.
+        """
         # Parse path for endpoint and query params
         if '/fixtures/statistics' in self.path:
             query_components = parse_qs(urlparse(self.path).query)
             fixture_id = query_components.get('fixture', ['default'])[0]
             # Generate response mimicking API-Football structure
-            stats = generate_mock_stats(fixture_id)
+            # Updated: generate_mock_stats now returns (stats_list, elapsed_minute)
+            # 'elapsed' added to top-level for easy extraction without breaking stats structure
+            stats, elapsed = generate_mock_stats(fixture_id)
             response_data = {
                 "get": "fixtures/statistics",
                 "parameters": {"fixture": fixture_id},
-                "response": stats
+                "response": stats,
+                # Elapsed minute: when all stats thresholds reached for the fixture
+                # Enables alert to report "at minute X" as per enhancement
+                "elapsed": elapsed
             }
             self._set_headers()
             self.wfile.write(json.dumps(response_data).encode('utf-8'))

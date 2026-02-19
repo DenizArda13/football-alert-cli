@@ -22,12 +22,18 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
     Checks a fixture against multiple conditions (for multi-stat tracking).
     conditions: list of dicts e.g., [{'stat': 'Corners', 'team': 'Home Team', 'target': 3}, ...]
     Returns True ONLY if ALL conditions are met simultaneously (AND logic).
-    Fetches stats once per call for efficiency. Prints unified alert.
-    This implements the requirement: alerts trigger only when all specified stats have been met.
+    Fetches stats AND elapsed minute once per call for efficiency. Prints unified alert
+    INCLUDING the minute when thresholds reached.
+    This implements the requirement: alerts now report "at minute X" when all stats
+    thresholds are met for the fixture/match.
     """
-    data = fetch_match_stats(fixture_id, mock=mock)
+    # Updated: fetch_match_stats now returns (stats_list, elapsed_minute) tuple
+    # to include match minute in alert (when all thresholds reached)
+    # Elapsed from mock progression/server response; ensures "when did ... in minute"
+    stats, elapsed = fetch_match_stats(fixture_id, mock=mock)
     
-    if not data:
+    # Use stats for condition check (elapsed only for alert timing)
+    if not stats:
         return False
 
     all_met = True
@@ -39,10 +45,10 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
         target = cond['target']
         condition_met = False
 
-        for team_data in data:
+        for team_data in stats:  # renamed from data for clarity
             if team_data['team']['name'] == team_name:
-                stats = team_data.get('statistics', [])
-                for stat in stats:
+                stats_list = team_data.get('statistics', [])  # avoid name clash
+                for stat in stats_list:
                     if stat['type'] == stat_name:
                         current_value = stat['value']
                         if current_value is None:
@@ -59,11 +65,12 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
             # Continue checking others for potential (but don't early return)
 
     if all_met:
-        # Professional, concise alert format for multi-stat/multi-match scenarios
-        # Structured as: "ALERT: Fixture ID - Team stat details" for clarity and professionalism
-        # Avoids spam, focuses on key info (fixture, teams, achieved stats)
+        # Professional, concise alert format UPDATED for minute reporting:
+        # "ALERT: Fixture ID at minute X - Targets reached: ..." 
+        # This fulfills: include when (in match minute) all stats reached thresholds.
+        # Minute captured at the poll when ALL conditions first met simultaneously.
         alert_details = '; '.join(alert_parts)
-        print(f"🚨 ALERT: Fixture {fixture_id} - Targets reached: {alert_details}.")
+        print(f"🚨 ALERT: Fixture {fixture_id} at minute {elapsed} - Targets reached: {alert_details}.")
         return True
     return False
 
@@ -73,6 +80,7 @@ def _monitor_fixture(fixture_id, conditions, interval, mock, shutdown_event):
     Private helper for per-fixture monitoring in a dedicated thread.
     Runs independent loop until conditions met or shutdown.
     Enables true concurrency so fixtures don't block each other.
+    Alert now includes the minute when all statistics reach their threshold values.
     """
     triggered = False
     while not triggered and not shutdown_event.is_set():
@@ -94,6 +102,7 @@ def start_monitoring(configs, interval=60, mock=False):
     configs: List of dicts -> [{'fixture_id': 123, 'stat': 'Corners', 'team': 'Home Team', 'target': 5}, ...]
     
     For multiple stats on the same fixture, all conditions must be met (AND logic) before triggering an alert.
+    Now includes the match minute (from mock/server progression) when all thresholds are reached for the fixture.
     Each fixture runs in its own thread for independent/non-blocking monitoring (fixes synchronous loop blocking).
     Multi-fixture support is now truly parallel.
     """
