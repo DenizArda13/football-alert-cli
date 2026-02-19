@@ -7,24 +7,39 @@ Supports multiple matches tracked simultaneously. For multiple statistics per ma
 
 ## Setup
 
-1. Activate the environment:
+For Linux/Debian-based environments (common in containers/test setups) missing pip/venv, first bootstrap:
+
+```bash
+# Install system packages (no sudo if root; run once)
+apt-get update -qq && apt-get install -y python3-pip python3-venv
+```
+
+1. (Re)create clean venv:
+   ```bash
+   rm -rf venv
+   python3 -m venv venv
+   ```
+
+2. Activate the environment:
    ```bash
    # Windows (PowerShell)
    .\venv\Scripts\activate
    # Mac/Linux
    source venv/bin/activate
    ```
-2. Install the package (editable mode):
+
+3. Install the package (editable mode):
    ```bash
    pip install -e .
    ```
-   (Only Click and requests are required; mock server uses Python stdlib.)
+   (Installs Click and requests; mock server uses Python stdlib. Re-run this after code changes.)
 
 **No external API key required!** The project now uses a local mock server by default to comply with restrictions on external network dependencies (e.g., no RapidAPI calls). 
 
-- The mock server runs automatically on localhost:5000 when needed.
-- Original `--mock` flag still supported for in-memory simulation (faster, no server).
-- All stats are simulated locally; fixture IDs are ignored in mocks but accepted for compatibility.
+- CLI entrypoint `football-alert` available post-install/activation (try examples below).
+- `--mock` flag for fast in-memory sim (still needs Click; supports new minute-in-match alerts).
+- All stats simulated locally; fixture IDs accepted for compatibility.
+- Mock server runs automatically on localhost:5000 when needed (stdlib-only).
 
 ## Local Mock Server
 
