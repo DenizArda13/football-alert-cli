@@ -1,9 +1,9 @@
 Markdown
 # Football Alert CLI
 
-A professional Python CLI application for tracking live football match statistics. Set targets for statistics (e.g., corners reach 5 for a team), and receive an alert once reached or exceeded. No logical operators required.
+A professional Python CLI application for tracking live football match statistics using a local mock server (no external network deps). Set targets for statistics (e.g., corners reach 5 for a team), and receive an alert once reached or exceeded. No logical operators required.
 
-Supports multiple matches tracked simultaneously and multiple statistics per match.
+Supports multiple matches tracked simultaneously. For multiple statistics per match/fixture, alerts trigger ONLY when ALL specified conditions are met simultaneously (AND logic).
 
 ## Setup
 
@@ -46,7 +46,7 @@ football-alert alert --fixture-id 123456 --stat Corners --team "Home Team" --tar
 (Note: `--mock` optional; fixture ID accepted for compatibility but not used in simulation.)
 
 **Multiple Statistics for One Match**
-Track different stats simultaneously in the same fixture:
+Track different stats simultaneously in the same fixture. Alert triggers ONLY when ALL conditions met (e.g., Corners AND Total Shots):
 ```bash
 football-alert alert \
   --fixture-id 123456 --stat Corners --team "Home Team" --target 3 \
@@ -55,7 +55,7 @@ football-alert alert \
 ```
 
 **Multiple Matches Tracked Simultaneously**
-Monitor stats across several fixtures in parallel:
+Monitor stats across several fixtures in parallel (each fixture's conditions independent):
 ```bash
 football-alert alert \
   --fixture-id 123 --stat Corners --team "Home Team" --target 3 \
@@ -63,15 +63,15 @@ football-alert alert \
   --interval 1
 ```
 
-Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes.
+Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly.
 ## Features
 
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages.
 - Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
 - Simultaneous multi-match support: Efficient polling across fixtures.
-- Multi-stat per match: Independent alerts for different conditions.
+- **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture).
 - Alerts fire when stat reaches/exceeds target (simple, operator-free).
-- Professional, concise alert messages.
+- Professional, unified alert messages for multi-stat cases.
 - Mock mode (`--mock`) for in-memory testing; extendable for notifications (e.g., email).
 
 ## Development & Testing
@@ -88,8 +88,8 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 
 - `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls).
-- `football_alert/monitor.py`: Monitoring logic (unchanged).
-- `football_alert/cli.py`: CLI entrypoint (backward compatible).
+- `football_alert/monitor.py`: Core monitoring with grouped per-fixture multi-stat AND logic.
+- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for multi-stat behavior).
 - `setup.py`: No additional deps beyond original.
 
 Code is clean, type-hinted where applicable, and modular.
