@@ -71,10 +71,11 @@ football-alert alert \
 (Example output: "🚨 ALERT: Fixture 123456 at minute 15 - Targets reached: Home Team reached 5 corners; Away Team reached 6 total shots.")
 
 **Multiple Matches Tracked Simultaneously**
-Monitor stats across several fixtures in *parallel* (each in independent thread; non-blocking, no synchronous loop issues):
+Monitor stats across several fixtures in *parallel* (each in independent thread; non-blocking, no synchronous loop issues; fixed key consistency for reliable triggering in mixed modes):
 ```bash
 # Multi-fixture test command (with multi-stat per fixture for full concurrency demo)
 # Uses small targets/short interval + --mock for quick alerts
+# Now reliably triggers all (e.g., no stuck loops after first alert)
 football-alert alert \
   --fixture-id 123 --stat Corners --team "Home Team" --target 1 \
   --fixture-id 123 --stat "Total Shots" --team "Away Team" --target 2 \
@@ -83,16 +84,16 @@ football-alert alert \
   --mock --interval 1
 ```
 
-Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly (minute advances ~5 per poll). Cumulative stats ensure multi-stat cases trigger reliably. 
+Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly (minute advances ~5 per poll). Cumulative stats (with type-normalized keys) ensure multi-stat/multi-match cases trigger reliably without loops. 
 
 Example concurrent output (now with minute):
 - "🚨 ALERT: Fixture 123 at minute 5 - Targets reached: ..."
 - "🚨 ALERT: Fixture 456 at minute 10 - Targets reached: ..." (in parallel)
 ## Features
 
-- **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats prevent loops in multi-stat cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
+- **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats (with fixture ID type normalization for str/int consistency) prevent loops in multi-stat/multi-match cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
 - Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
-- **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism).
+- **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism; fixed for reliable alerts across all fixtures).
 - **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture). Now includes "at minute X" when all statistics reach their threshold values.
 - Alerts fire when stat reaches/exceeds target (simple, operator-free) with professional formatting (e.g., "🚨 ALERT: Fixture X at minute Y - Targets reached: ...").
 - Mock mode (`--mock`) for in-memory testing; extendable for notifications (e.g., email).
@@ -110,7 +111,7 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 
 ## Project Structure
 
-- `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Cumulative stats + elapsed minute for reliable multi-stat triggering and "when" (minute) reporting.
+- `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Cumulative stats (fixture_id normalized to str) + elapsed minute for reliable multi-stat/multi-match triggering and "when" (minute) reporting.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls); in-memory mock also cumulative and now returns (stats, elapsed) tuple.
 - `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking); alerts now include match minute when all stats thresholds reached.
 - `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat).

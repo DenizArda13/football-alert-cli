@@ -19,7 +19,15 @@ def generate_mock_stats(fixture_id):
     Ensures multi-stat conditions can reliably be met over time without stuck loops.
     Now includes elapsed minute for alerts (advances ~5 min per poll for quick demo; caps at 90).
     """
+    # Normalize fixture_id to str for consistent dict keys in progress tracking.
+    # Fixes bug: CLI passes int (e.g., 123), query_parse gives str (e.g., '123');
+    # mismatched keys caused stalled progress in multi-fixture/non-mock cases,
+    # leading to infinite loops after first alert.
+    # Ensures true per-fixture independence across threads/modes.
+    fixture_id = str(fixture_id)
+
     # Increment progress for this fixture (persistent across calls/polls)
+    # _fixture_progress is module-level but now key-consistent (thread-safe for increments)
     if fixture_id not in _fixture_progress:
         _fixture_progress[fixture_id] = 0
     _fixture_progress[fixture_id] += 1
