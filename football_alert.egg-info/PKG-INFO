@@ -1,6 +1,3 @@
-Metadata-Version: 2.4
+Metadata-Version: 2.1
 Name: football-alert
 Version: 0.1
-Requires-Dist: Click
-Requires-Dist: requests
-Dynamic: requires-dist
