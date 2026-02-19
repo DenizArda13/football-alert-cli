@@ -61,14 +61,14 @@ football-alert alert --fixture-id 123456 --stat Corners --team "Home Team" --tar
 (Note: `--mock` optional; fixture ID accepted for compatibility but not used in simulation.)
 
 **Multiple Statistics for One Match**
-Track different stats simultaneously in the same fixture. Alert triggers ONLY when ALL conditions met (e.g., Corners AND Total Shots); uses professional format and now includes the minute in the match when thresholds reached:
+Track different stats simultaneously in the same fixture. Alert triggers ONLY when ALL conditions met (e.g., Corners AND Total Shots); uses the EXACT new professional format:
 ```bash
 football-alert alert \
   --fixture-id 123456 --stat Corners --team "Home Team" --target 3 \
   --fixture-id 123456 --stat "Total Shots" --team "Away Team" --target 5 \
   --mock --interval 1
 ```
-(Example output: "🚨 ALERT: Fixture 123456 at minute 15 - Targets reached: Home Team reached 5 corners; Away Team reached 6 total shots.")
+(Example output: "🚨 ALERT: Home Team reached 3 Corners. (15'); Away Team reached 5 Total Shots. (15')")
 
 **Multiple Matches Tracked Simultaneously**
 Monitor stats across several fixtures in *parallel* (each in independent thread; non-blocking, no synchronous loop issues; fixed key consistency for reliable triggering in mixed modes):
@@ -76,6 +76,7 @@ Monitor stats across several fixtures in *parallel* (each in independent thread;
 # Multi-fixture test command (with multi-stat per fixture for full concurrency demo)
 # Uses small targets/short interval + --mock for quick alerts
 # Now reliably triggers all (e.g., no stuck loops after first alert)
+# Each fixture's alert follows exact new format
 football-alert alert \
   --fixture-id 123 --stat Corners --team "Home Team" --target 1 \
   --fixture-id 123 --stat "Total Shots" --team "Away Team" --target 2 \
@@ -86,16 +87,16 @@ football-alert alert \
 
 Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly (minute advances ~5 per poll). Cumulative stats (with type-normalized keys) ensure multi-stat/multi-match cases trigger reliably without loops. 
 
-Example concurrent output (now with minute):
-- "🚨 ALERT: Fixture 123 at minute 5 - Targets reached: ..."
-- "🚨 ALERT: Fixture 456 at minute 10 - Targets reached: ..." (in parallel)
+Example concurrent output (new format; one line per fixture):
+- "🚨 ALERT: Home Team reached 1 Corners. (5'); Away Team reached 2 Total Shots. (5')"
+- "🚨 ALERT: Home Team reached 1 Goals. (10'); Away Team reached 1 Corners. (10')" (in parallel)
 ## Features
 
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats (with fixture ID type normalization for str/int consistency) prevent loops in multi-stat/multi-match cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
 - Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
 - **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism; fixed for reliable alerts across all fixtures).
-- **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture). Now includes "at minute X" when all statistics reach their threshold values.
-- Alerts fire when stat reaches/exceeds target (simple, operator-free) with professional formatting (e.g., "🚨 ALERT: Fixture X at minute Y - Targets reached: ...").
+- **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture). Uses exact new format (e.g., "[Team] reached [Target] [Stat]. ([Min]'); ...").
+- Alerts fire when stat reaches/exceeds target (simple, operator-free) with professional formatting (e.g., "🚨 ALERT: Home Team reached 3 Corners. (15'); Away Team reached 5 Total Shots. (15')").
 - Mock mode (`--mock`) for in-memory testing; extendable for notifications (e.g., email).
 
 ## Development & Testing
@@ -104,7 +105,7 @@ Example concurrent output (now with minute):
 - Run CLI examples above (no API key or internet needed; mock server handles all).
 - Test server standalone: `python -m football_alert.mock_server` (Ctrl+C to stop; pure stdlib).
 - To verify mock endpoint (using stdlib): `python3 -c "import urllib.request, json; d=json.loads(urllib.request.urlopen('http://127.0.0.1:5000/fixtures/statistics?fixture=123').read()); print(d)"` (should return JSON stats with 'elapsed' minute field for threshold timing).
-- Test complex multi-match/multi-stat: Use examples with --mock (cumulative data ensures no stuck loops; check professional alerts now include "at minute X" when all thresholds reached).
+- Test complex multi-match/multi-stat: Use examples with --mock (cumulative data ensures no stuck loops; check exact new alert format e.g., "🚨 ALERT: Home Team reached 1 Corners. (5'); ...").
 - (Note: pytest tests/ mentioned in original but directory may need setup for full coverage; core tested via manual runs.)
 
 Since the test environment may lack pip/venv, direct Python module testing is used internally.

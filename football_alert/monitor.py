@@ -23,9 +23,7 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
     conditions: list of dicts e.g., [{'stat': 'Corners', 'team': 'Home Team', 'target': 3}, ...]
     Returns True ONLY if ALL conditions are met simultaneously (AND logic).
     Fetches stats AND elapsed minute once per call for efficiency. Prints unified alert
-    INCLUDING the minute when thresholds reached.
-    This implements the requirement: alerts now report "at minute X" when all stats
-    thresholds are met for the fixture/match.
+    in the EXACT required format (no fixture ID; uses target value; minute with '; separator for multi-stat).
     """
     # Updated: fetch_match_stats now returns (stats_list, elapsed_minute) tuple
     # to include match minute in alert (when all thresholds reached)
@@ -53,10 +51,15 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
                         current_value = stat['value']
                         if current_value is None:
                             continue
-                        # Logic: Reach or Exceed
+                        # Logic: Reach or Exceed (current_value >= target still)
                         if int(current_value) >= target:
                             condition_met = True
-                            alert_parts.append(f"{team_name} reached {current_value} {stat_name.lower()}")
+                            # Build part in EXACT spec format: "[Team] reached [Target] [Statistic]. ([Minute]')"
+                            # - stat_name as original case (e.g., "Total Shots")
+                            # - Use target (not current_value)
+                            # - Period after stat; minute with '; shared elapsed for fixture
+                            # This ensures multi-stat joins correctly with "; "
+                            alert_parts.append(f"{team_name} reached {target} {stat_name}. ({elapsed}')")
                             break
                 if condition_met:
                     break
@@ -65,12 +68,12 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
             # Continue checking others for potential (but don't early return)
 
     if all_met:
-        # Professional, concise alert format UPDATED for minute reporting:
-        # "ALERT: Fixture ID at minute X - Targets reached: ..." 
-        # This fulfills: include when (in match minute) all stats reached thresholds.
-        # Minute captured at the poll when ALL conditions first met simultaneously.
+        # EXACT required format: "🚨 ALERT: " + parts joined by "; " (one line, even for multi-stat)
+        # E.g., "🚨 ALERT: Home Team reached 3 Corners. (20'); Away Team reached 5 Total Shots. (20')"
+        # Minute is per-fixture (captured at poll when ALL met); no fixture ID or extra text.
+        # Fulfills spec for single/multi-stat/multi-match cases.
         alert_details = '; '.join(alert_parts)
-        print(f"🚨 ALERT: Fixture {fixture_id} at minute {elapsed} - Targets reached: {alert_details}.")
+        print(f"🚨 ALERT: {alert_details}")
         return True
     return False
 
@@ -80,12 +83,12 @@ def _monitor_fixture(fixture_id, conditions, interval, mock, shutdown_event):
     Private helper for per-fixture monitoring in a dedicated thread.
     Runs independent loop until conditions met or shutdown.
     Enables true concurrency so fixtures don't block each other.
-    Alert now includes the minute when all statistics reach their threshold values.
+    Alert printed in exact spec format by check_all_conditions_for_fixture.
     """
     triggered = False
     while not triggered and not shutdown_event.is_set():
         # check_all_conditions_for_fixture handles AND logic for multi-stat
-        # Prints professional alert on trigger
+        # Prints alert on trigger in required format (e.g., with ; for multi-stat)
         if check_all_conditions_for_fixture(fixture_id, conditions, mock):
             triggered = True
         else:
