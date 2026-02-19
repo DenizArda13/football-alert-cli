@@ -3,6 +3,7 @@ setup.py
 football_alert/__init__.py
 football_alert/api.py
 football_alert/cli.py
+football_alert/mock_server.py
 football_alert/monitor.py
 football_alert.egg-info/PKG-INFO
 football_alert.egg-info/SOURCES.txt

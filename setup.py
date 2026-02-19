@@ -7,6 +7,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'Click',
+        # requests: used for querying the *local* mock server (stdlib alternative possible but retained for simplicity)
         'requests',
     ],
     entry_points='''
