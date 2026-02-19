@@ -1,4 +1,5 @@
 import time
+import threading
 from collections import defaultdict
 from .api import fetch_match_stats
 
@@ -66,13 +67,35 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
         return True
     return False
 
+
+def _monitor_fixture(fixture_id, conditions, interval, mock, shutdown_event):
+    """
+    Private helper for per-fixture monitoring in a dedicated thread.
+    Runs independent loop until conditions met or shutdown.
+    Enables true concurrency so fixtures don't block each other.
+    """
+    triggered = False
+    while not triggered and not shutdown_event.is_set():
+        # check_all_conditions_for_fixture handles AND logic for multi-stat
+        # Prints professional alert on trigger
+        if check_all_conditions_for_fixture(fixture_id, conditions, mock):
+            triggered = True
+        else:
+            # Sleep in thread; interruptible via event
+            time.sleep(interval)
+
+    if shutdown_event.is_set():
+        return  # Graceful exit on Ctrl+C
+
+
 def start_monitoring(configs, interval=60, mock=False):
     """
-    Monitors multiple match configurations simultaneously, with support for multiple statistics per fixture.
+    Monitors multiple match configurations *concurrently* using threads, with support for multiple statistics per fixture.
     configs: List of dicts -> [{'fixture_id': 123, 'stat': 'Corners', 'team': 'Home Team', 'target': 5}, ...]
     
     For multiple stats on the same fixture, all conditions must be met (AND logic) before triggering an alert.
-    Multi-fixture support remains, with independent conditions per fixture.
+    Each fixture runs in its own thread for independent/non-blocking monitoring (fixes synchronous loop blocking).
+    Multi-fixture support is now truly parallel.
     """
     # Group configs by fixture_id to enable per-fixture multi-stat AND logic
     # (Allows same fixture repeated for multiple stats, as per CLI options)
@@ -85,37 +108,34 @@ def start_monitoring(configs, interval=60, mock=False):
         })
 
     unique_fixtures = list(groups.keys())
-    print(f"Starting multi-monitor for fixtures {unique_fixtures} (multi-stat AND per fixture). Press Ctrl+C to stop.")
+    print(f"Starting concurrent multi-monitor for fixtures {unique_fixtures} (independent threads per fixture). Press Ctrl+C to stop.")
     
-    # Track which fixtures' alerts have already triggered to avoid spamming
-    # Key: fixture_id, Value: triggered bool
-    triggered_fixtures = {fid: False for fid in unique_fixtures}
-
+    # Shared event for graceful shutdown across threads on Ctrl+C
+    # Ensures all threads stop cleanly without blocking
+    shutdown_event = threading.Event()
+    
+    # One daemon thread per fixture/group for true parallelism
+    # Fixes synchronous loop blocking other fixtures
+    threads = []
+    for fixture_id, conditions in groups.items():
+        thread = threading.Thread(
+            target=_monitor_fixture,
+            args=(fixture_id, conditions, interval, mock, shutdown_event),
+            daemon=True  # Threads auto-terminate when main exits
+        )
+        thread.start()
+        threads.append(thread)
+    
     try:
-        while True:
-            all_triggered = True
-            
-            for fixture_id, conditions in groups.items():
-                if triggered_fixtures[fixture_id]:
-                    continue  # Skip if already triggered for this fixture/group
-                
-                # Use multi-condition check: True only if ALL stats met for the fixture
-                result = check_all_conditions_for_fixture(
-                    fixture_id, 
-                    conditions, 
-                    mock
-                )
-                
-                if result:
-                    triggered_fixtures[fixture_id] = True
-                else:
-                    all_triggered = False
-            
-            if all_triggered:
-                print("All fixture alerts triggered (all conditions met). Stopping monitor.")
-                break
-
-            time.sleep(interval)
-            
+        # Wait for all threads to complete (i.e., all fixtures' alerts triggered)
+        # Non-blocking: each fixture monitors independently
+        for thread in threads:
+            thread.join()
+        print("All fixture alerts triggered (all conditions met). Stopping monitor.")
     except KeyboardInterrupt:
+        # Signal shutdown to all threads
+        shutdown_event.set()
+        # Join with timeout to avoid hang
+        for thread in threads:
+            thread.join(timeout=1.0)
         print("\nMonitoring stopped by user.")

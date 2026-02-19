@@ -56,20 +56,28 @@ football-alert alert \
 (Example output: "🚨 ALERT: Fixture 123456 - Targets reached: Home Team reached 5 corners; Away Team reached 6 total shots.")
 
 **Multiple Matches Tracked Simultaneously**
-Monitor stats across several fixtures in parallel (each fixture's conditions independent; no stuck loops with cumulative mocks):
+Monitor stats across several fixtures in *parallel* (each in independent thread; non-blocking, no synchronous loop issues):
 ```bash
+# Multi-fixture test command (with multi-stat per fixture for full concurrency demo)
+# Uses small targets/short interval + --mock for quick alerts
 football-alert alert \
-  --fixture-id 123 --stat Corners --team "Home Team" --target 3 \
-  --fixture-id 456 --stat "Total Shots" --team "Away Team" --target 4 \
-  --interval 1
+  --fixture-id 123 --stat Corners --team "Home Team" --target 1 \
+  --fixture-id 123 --stat "Total Shots" --team "Away Team" --target 2 \
+  --fixture-id 456 --stat Goals --team "Home Team" --target 1 \
+  --fixture-id 456 --stat Corners --team "Away Team" --target 1 \
+  --mock --interval 1
 ```
 
-Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly. Cumulative stats ensure multi-stat cases trigger reliably.
+Fixture IDs are placeholders (from original API docs at https://www.api-football.com/); simulation ignores them for demo purposes. Use small targets/short intervals in --mock to see alerts quickly. Cumulative stats ensure multi-stat cases trigger reliably. 
+
+Example concurrent output:
+- "🚨 ALERT: Fixture 123 - Targets reached: ..."
+- "🚨 ALERT: Fixture 456 - Targets reached: ..." (in parallel)
 ## Features
 
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats prevent loops in multi-stat cases.
 - Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
-- Simultaneous multi-match support: Efficient polling across fixtures.
+- **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism).
 - **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture).
 - Alerts fire when stat reaches/exceeds target (simple, operator-free) with professional formatting (e.g., "🚨 ALERT: Fixture X - Targets reached: ...").
 - Mock mode (`--mock`) for in-memory testing; extendable for notifications (e.g., email).
@@ -89,8 +97,8 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 
 - `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Cumulative stats for reliable multi-stat triggering.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls); in-memory mock also cumulative.
-- `football_alert/monitor.py`: Core monitoring with grouped per-fixture multi-stat AND logic.
-- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for multi-stat behavior).
+- `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking).
+- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat).
 - `setup.py`: No additional deps beyond original.
 
 Code is clean, type-hinted where applicable, and modular.

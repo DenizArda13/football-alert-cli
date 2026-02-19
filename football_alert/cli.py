@@ -18,7 +18,8 @@ def alert(fixture_id, stat, team, target, interval, mock):
     Track matches and send alerts.
     Inputs must be paired (same number of --fixture-id, --stat, --team, --target).
     For multiple stats on the same fixture-id, alerts trigger ONLY when ALL are met (AND logic).
-    Different fixtures are monitored independently.
+    Fixtures are monitored concurrently in threads (independent, non-blocking).
+    Ctrl+C gracefully stops all.
     """
     # Validation: Ensure all lists have the same length
     if not (len(fixture_id) == len(stat) == len(team) == len(target)):
