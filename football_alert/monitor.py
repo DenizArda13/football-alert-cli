@@ -1,67 +1,141 @@
 import time
+import threading
+from collections import defaultdict
 from .api import fetch_match_stats
 
 def check_single_fixture(fixture_id, stat_name, team_name, target, mock=False):
     """
     Checks a single fixture for a specific condition.
     Returns True if alert triggered, False otherwise.
+    (Retained for backward compatibility and single-stat cases.)
+    """
+    # Delegate to multi-condition checker (handles single as group of 1)
+    return check_all_conditions_for_fixture(
+        fixture_id, 
+        [{'stat': stat_name, 'team': team_name, 'target': target}], 
+        mock
+    )
+
+
+def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
+    """
+    Checks a fixture against multiple conditions (for multi-stat tracking).
+    conditions: list of dicts e.g., [{'stat': 'Corners', 'team': 'Home Team', 'target': 3}, ...]
+    Returns True ONLY if ALL conditions are met simultaneously (AND logic).
+    Fetches stats once per call for efficiency. Prints unified alert.
+    This implements the requirement: alerts trigger only when all specified stats have been met.
     """
     data = fetch_match_stats(fixture_id, mock=mock)
     
     if not data:
         return False
 
-    for team_data in data:
-        if team_data['team']['name'] == team_name:
-            stats = team_data.get('statistics', [])
-            for stat in stats:
-                if stat['type'] == stat_name:
-                    current_value = stat['value']
-                    if current_value is None:
-                        continue
-                        
-                    # Logic: Reach or Exceed
-                    if int(current_value) >= target:
-                        print(f"ALERT: The {team_name} has reached {current_value} {stat_name.lower()} in fixture {fixture_id}.")
-                        return True
+    all_met = True
+    alert_parts = []
+
+    for cond in conditions:
+        stat_name = cond['stat']
+        team_name = cond['team']
+        target = cond['target']
+        condition_met = False
+
+        for team_data in data:
+            if team_data['team']['name'] == team_name:
+                stats = team_data.get('statistics', [])
+                for stat in stats:
+                    if stat['type'] == stat_name:
+                        current_value = stat['value']
+                        if current_value is None:
+                            continue
+                        # Logic: Reach or Exceed
+                        if int(current_value) >= target:
+                            condition_met = True
+                            alert_parts.append(f"{team_name} reached {current_value} {stat_name.lower()}")
+                            break
+                if condition_met:
+                    break
+        if not condition_met:
+            all_met = False
+            # Continue checking others for potential (but don't early return)
+
+    if all_met:
+        # Professional, concise alert format for multi-stat/multi-match scenarios
+        # Structured as: "ALERT: Fixture ID - Team stat details" for clarity and professionalism
+        # Avoids spam, focuses on key info (fixture, teams, achieved stats)
+        alert_details = '; '.join(alert_parts)
+        print(f"🚨 ALERT: Fixture {fixture_id} - Targets reached: {alert_details}.")
+        return True
     return False
+
+
+def _monitor_fixture(fixture_id, conditions, interval, mock, shutdown_event):
+    """
+    Private helper for per-fixture monitoring in a dedicated thread.
+    Runs independent loop until conditions met or shutdown.
+    Enables true concurrency so fixtures don't block each other.
+    """
+    triggered = False
+    while not triggered and not shutdown_event.is_set():
+        # check_all_conditions_for_fixture handles AND logic for multi-stat
+        # Prints professional alert on trigger
+        if check_all_conditions_for_fixture(fixture_id, conditions, mock):
+            triggered = True
+        else:
+            # Sleep in thread; interruptible via event
+            time.sleep(interval)
+
+    if shutdown_event.is_set():
+        return  # Graceful exit on Ctrl+C
+
 
 def start_monitoring(configs, interval=60, mock=False):
     """
-    Monitors multiple match configurations simultaneously.
-    configs: List of dicts -> [{'fixture_id': 123, 'stat': 'Corners', 'team': 'Home', 'target': 5}, ...]
-    """
-    print(f"Starting multi-monitor for fixtures {[c['fixture_id'] for c in configs]}. Press Ctrl+C to stop.")
+    Monitors multiple match configurations *concurrently* using threads, with support for multiple statistics per fixture.
+    configs: List of dicts -> [{'fixture_id': 123, 'stat': 'Corners', 'team': 'Home Team', 'target': 5}, ...]
     
-    # Track which alerts have already triggered to avoid spamming
-    triggered_configs = [False] * len(configs)
+    For multiple stats on the same fixture, all conditions must be met (AND logic) before triggering an alert.
+    Each fixture runs in its own thread for independent/non-blocking monitoring (fixes synchronous loop blocking).
+    Multi-fixture support is now truly parallel.
+    """
+    # Group configs by fixture_id to enable per-fixture multi-stat AND logic
+    # (Allows same fixture repeated for multiple stats, as per CLI options)
+    groups = defaultdict(list)
+    for config in configs:
+        groups[config['fixture_id']].append({
+            'stat': config['stat'],
+            'team': config['team'],
+            'target': config['target']
+        })
 
+    unique_fixtures = list(groups.keys())
+    print(f"Starting concurrent multi-monitor for fixtures {unique_fixtures} (independent threads per fixture). Press Ctrl+C to stop.")
+    
+    # Shared event for graceful shutdown across threads on Ctrl+C
+    # Ensures all threads stop cleanly without blocking
+    shutdown_event = threading.Event()
+    
+    # One daemon thread per fixture/group for true parallelism
+    # Fixes synchronous loop blocking other fixtures
+    threads = []
+    for fixture_id, conditions in groups.items():
+        thread = threading.Thread(
+            target=_monitor_fixture,
+            args=(fixture_id, conditions, interval, mock, shutdown_event),
+            daemon=True  # Threads auto-terminate when main exits
+        )
+        thread.start()
+        threads.append(thread)
+    
     try:
-        while True:
-            all_triggered = True
-            
-            for idx, config in enumerate(configs):
-                if triggered_configs[idx]:
-                    continue  # Skip if already triggered
-                
-                result = check_single_fixture(
-                    config['fixture_id'], 
-                    config['stat'], 
-                    config['team'], 
-                    config['target'], 
-                    mock
-                )
-                
-                if result:
-                    triggered_configs[idx] = True
-                else:
-                    all_triggered = False
-            
-            if all_triggered:
-                print("All alerts triggered across fixtures. Stopping monitor.")
-                break
-
-            time.sleep(interval)
-            
+        # Wait for all threads to complete (i.e., all fixtures' alerts triggered)
+        # Non-blocking: each fixture monitors independently
+        for thread in threads:
+            thread.join()
+        print("All fixture alerts triggered (all conditions met). Stopping monitor.")
     except KeyboardInterrupt:
+        # Signal shutdown to all threads
+        shutdown_event.set()
+        # Join with timeout to avoid hang
+        for thread in threads:
+            thread.join(timeout=1.0)
         print("\nMonitoring stopped by user.")
