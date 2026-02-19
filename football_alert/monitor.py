@@ -58,8 +58,11 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False):
             # Continue checking others for potential (but don't early return)
 
     if all_met:
-        # Unified alert for all conditions met
-        print(f"ALERT: All conditions met in fixture {fixture_id}: {', '.join(alert_parts)}.")
+        # Professional, concise alert format for multi-stat/multi-match scenarios
+        # Structured as: "ALERT: Fixture ID - Team stat details" for clarity and professionalism
+        # Avoids spam, focuses on key info (fixture, teams, achieved stats)
+        alert_details = '; '.join(alert_parts)
+        print(f"🚨 ALERT: Fixture {fixture_id} - Targets reached: {alert_details}.")
         return True
     return False
 

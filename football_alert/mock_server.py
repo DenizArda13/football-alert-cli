@@ -7,12 +7,26 @@ from urllib.parse import urlparse, parse_qs
 # Stdlib-based mock server (no external dependencies like Flask)
 # Mimics RapidAPI endpoint locally using only Python standard library
 
+# Module-level state for cumulative, non-decreasing stats per fixture
+# This prevents oscillating values that could cause sync issues for multi-stat AND conditions
+# Simulates realistic match progression (stats only increase or stabilize)
+_fixture_progress = {}
+
 def generate_mock_stats(fixture_id):
     """
     Generates simulated statistics similar to the original mock.
-    Uses time-based variation for demo purposes to simulate changing stats.
+    Uses cumulative progression for demo purposes to simulate changing (non-decreasing) stats.
+    Ensures multi-stat conditions can reliably be met over time without stuck loops.
     """
-    base_val = int(time.time()) % 10 + 1  # 1-10 range
+    # Increment progress for this fixture (persistent across calls/polls)
+    if fixture_id not in _fixture_progress:
+        _fixture_progress[fixture_id] = 0
+    _fixture_progress[fixture_id] += 1
+    progress = _fixture_progress[fixture_id]
+
+    # base_val ramps up to 15 then stabilizes (ensures >= typical targets like 1-10)
+    # Non-decreasing guarantees eventual all-met for AND in same poll
+    base_val = min(progress, 15)
     return [
         {
             "team": {"name": "Home Team"},
@@ -25,7 +39,7 @@ def generate_mock_stats(fixture_id):
         {
             "team": {"name": "Away Team"},
             "statistics": [
-                {"type": "Corners", "value": base_val - 1 if base_val > 0 else 0},
+                {"type": "Corners", "value": max(0, base_val - 1)},
                 {"type": "Total Shots", "value": base_val + 1},
                 {"type": "Goals", "value": base_val // 4}
             ]
