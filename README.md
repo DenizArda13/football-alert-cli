@@ -90,9 +90,30 @@ Fixture IDs are placeholders (from original API docs at https://www.api-football
 Example concurrent output (new format; one line per fixture):
 - "🚨 ALERT: Home Team reached 1 Corners. (5'); Away Team reached 2 Total Shots. (5')"
 - "🚨 ALERT: Home Team reached 1 Goals. (10'); Away Team reached 1 Corners. (10')" (in parallel)
+
+**Live Terminal Dashboard (Rich UI)**
+Monitor matches with a professional live-updating terminal dashboard powered by the Rich library. Use the `--dashboard` flag to enable it:
+```bash
+football-alert alert \
+  --fixture-id 123 --stat Corners --team "Home Team" --target 3 \
+  --fixture-id 123 --stat "Total Shots" --team "Away Team" --target 5 \
+  --mock --interval 1 --dashboard
+```
+
+The dashboard displays:
+- **Live Match Statistics Table**: Shows all tracked conditions with real-time updates
+  - Fixture ID, Statistic name, Team, Current value, Target value, Progress status
+  - Status indicators: ⏳ Tracking (with %), 🎯 MET (threshold reached), ✅ ALERT (triggered)
+  - Match minute when threshold was reached
+- **Summary Panel**: Key metrics including alerts triggered, fixtures monitored, elapsed time, and monitoring status
+- **Real-time Updates**: Dashboard refreshes 2x per second to reflect live data
+- **Professional UI**: Color-coded output with emojis for easy scanning
+
+The dashboard is completely optional—omit `--dashboard` to use the original console output with alerts.
 ## Features
 
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats (with fixture ID type normalization for str/int consistency) prevent loops in multi-stat/multi-match cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
+- **Live Terminal Dashboard**: Professional Rich-powered UI for real-time monitoring with color-coded status indicators, progress tracking, and summary metrics. Optional `--dashboard` flag enables live-updating terminal visualization.
 - Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
 - **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism; fixed for reliable alerts across all fixtures).
 - **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture). Uses exact new format (e.g., "[Team] reached [Target] [Stat]. ([Min]'); ...").
@@ -114,9 +135,10 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 
 - `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Cumulative stats (fixture_id normalized to str) + elapsed minute for reliable multi-stat/multi-match triggering and "when" (minute) reporting.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls); in-memory mock also cumulative and now returns (stats, elapsed) tuple.
-- `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking); alerts now include match minute when all stats thresholds reached.
-- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat).
-- `setup.py`: No additional deps beyond original.
+- `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking); alerts now include match minute when all stats thresholds reached. Integrates with dashboard for optional live UI.
+- `football_alert/dashboard.py`: **NEW** Live-updating Rich terminal UI module. Displays real-time statistics, progress tracking, alerts, and monitoring summary. Thread-safe state management for concurrent fixture updates. Optional feature activated via `--dashboard` CLI flag.
+- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat). Now includes `--dashboard` flag for Rich UI.
+- `setup.py`: Updated dependencies to include Rich library for dashboard visualization.
 
 Code is clean, type-hinted where applicable, and modular.
 

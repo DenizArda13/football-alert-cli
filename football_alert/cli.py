@@ -13,13 +13,15 @@ def main():
 @click.option('--target', multiple=True, required=True, type=int, help='Target number for the statistic.')
 @click.option('--interval', default=60, help='Polling interval in seconds.')
 @click.option('--mock', is_flag=True, help='Use mock data for testing.')
-def alert(fixture_id, stat, team, target, interval, mock):
+@click.option('--dashboard', is_flag=True, help='Enable live-updating Rich terminal dashboard.')
+def alert(fixture_id, stat, team, target, interval, mock, dashboard):
     """
     Track matches and send alerts.
     Inputs must be paired (same number of --fixture-id, --stat, --team, --target).
     For multiple stats on the same fixture-id, alerts trigger ONLY when ALL are met (AND logic).
     Fixtures are monitored concurrently in threads (independent, non-blocking).
     Ctrl+C gracefully stops all.
+    Use --dashboard to display a live-updating terminal UI powered by Rich library.
     """
     # Validation: Ensure all lists have the same length
     if not (len(fixture_id) == len(stat) == len(team) == len(target)):
@@ -36,7 +38,7 @@ def alert(fixture_id, stat, team, target, interval, mock):
             'target': target[i]
         })
 
-    start_monitoring(configs, interval, mock)
+    start_monitoring(configs, interval, mock, use_dashboard=dashboard)
 
 if __name__ == '__main__':
     main()

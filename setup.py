@@ -9,6 +9,7 @@ setup(
         'Click',
         # requests: used for querying the *local* mock server (stdlib alternative possible but retained for simplicity)
         'requests',
+        'rich',  # For live-updating terminal dashboard
     ],
     entry_points='''
         [console_scripts]

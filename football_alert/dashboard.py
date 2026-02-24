@@ -1,0 +1,224 @@
+"""
+Live-updating terminal dashboard for football match monitoring using Rich library.
+Displays real-time statistics, alerts, and monitoring status in a professional UI.
+"""
+
+import threading
+import time
+from collections import defaultdict
+from datetime import datetime
+from rich.console import Console
+from rich.table import Table
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.text import Text
+from rich.live import Live
+from rich.align import Align
+from rich.spinner import Spinner
+
+# Global dashboard state (thread-safe updates via locks)
+_dashboard_lock = threading.Lock()
+_fixture_stats = defaultdict(lambda: {
+    'conditions': [],
+    'current_values': {},
+    'alert_triggered': False,
+    'alert_time': None,
+    'elapsed_minute': 0,
+    'last_update': None
+})
+
+_global_stats = {
+    'total_alerts': 0,
+    'start_time': datetime.now(),
+    'monitoring': True,
+    'fixtures_count': 0
+}
+
+
+def update_fixture_stat(fixture_id, stat_name, team_name, current_value, target, elapsed_minute):
+    """
+    Updates the dashboard state with current fixture statistics.
+    Called from the monitoring loop to reflect real-time data.
+    """
+    with _dashboard_lock:
+        key = f"{team_name}_{stat_name}"
+        _fixture_stats[fixture_id]['current_values'][key] = current_value
+        _fixture_stats[fixture_id]['elapsed_minute'] = elapsed_minute
+        _fixture_stats[fixture_id]['last_update'] = datetime.now()
+        
+        # Check if this condition is met
+        if current_value is not None and int(current_value) >= target:
+            # Add to conditions if not already there
+            cond_key = (stat_name, team_name, target)
+            if cond_key not in _fixture_stats[fixture_id]['conditions']:
+                _fixture_stats[fixture_id]['conditions'].append(cond_key)
+
+
+def mark_alert_triggered(fixture_id):
+    """Mark that an alert has been triggered for this fixture."""
+    with _dashboard_lock:
+        _fixture_stats[fixture_id]['alert_triggered'] = True
+        _fixture_stats[fixture_id]['alert_time'] = datetime.now()
+        _global_stats['total_alerts'] += 1
+
+
+def set_fixtures_count(count):
+    """Set the total number of fixtures being monitored."""
+    with _dashboard_lock:
+        _global_stats['fixtures_count'] = count
+
+
+def initialize_conditions(fixture_id, conditions):
+    """
+    Initialize dashboard with conditions to track for a fixture.
+    conditions: list of dicts [{'stat': 'Corners', 'team': 'Home Team', 'target': 3}, ...]
+    """
+    with _dashboard_lock:
+        for cond in conditions:
+            stat_name = cond['stat']
+            team_name = cond['team']
+            target = cond['target']
+            cond_key = (stat_name, team_name, target)
+            if cond_key not in _fixture_stats[fixture_id]['conditions']:
+                _fixture_stats[fixture_id]['conditions'].append(cond_key)
+
+
+def stop_monitoring():
+    """Signal that monitoring has stopped."""
+    with _dashboard_lock:
+        _global_stats['monitoring'] = False
+
+
+def _build_stats_table():
+    """Build the main statistics table."""
+    table = Table(title="📊 Live Match Statistics", show_header=True, header_style="bold cyan")
+    table.add_column("Fixture ID", style="magenta")
+    table.add_column("Stat", style="cyan")
+    table.add_column("Team", style="green")
+    table.add_column("Current", style="yellow")
+    table.add_column("Target", style="blue")
+    table.add_column("Status", style="white")
+    table.add_column("Minute", style="dim")
+    
+    with _dashboard_lock:
+        if not _fixture_stats:
+            table.add_row("—", "—", "—", "—", "—", "Waiting...", "—")
+            return table
+        
+        for fixture_id, data in sorted(_fixture_stats.items()):
+            if not data['conditions']:
+                continue
+            
+            for stat_name, team_name, target in data['conditions']:
+                key = f"{team_name}_{stat_name}"
+                current = data['current_values'].get(key, "—")
+                
+                # Determine status
+                if data['alert_triggered']:
+                    status = "✅ ALERT"
+                    status_style = "green"
+                elif current != "—" and int(current) >= target:
+                    status = "🎯 MET"
+                    status_style = "yellow"
+                else:
+                    progress = ""
+                    if current != "—":
+                        pct = min(100, int((int(current) / target) * 100))
+                        progress = f" ({pct}%)"
+                    status = f"⏳ Tracking{progress}"
+                    status_style = "cyan"
+                
+                minute_str = f"{data['elapsed_minute']}'" if data['elapsed_minute'] else "—"
+                
+                table.add_row(
+                    str(fixture_id),
+                    stat_name,
+                    team_name,
+                    str(current),
+                    str(target),
+                    Text(status, style=status_style),
+                    minute_str
+                )
+    
+    return table
+
+
+def _build_alerts_panel():
+    """Build the alerts summary panel."""
+    with _dashboard_lock:
+        total_alerts = _global_stats['total_alerts']
+        triggered_count = sum(1 for data in _fixture_stats.values() if data['alert_triggered'])
+        fixtures = _global_stats['fixtures_count']
+        
+        elapsed = (datetime.now() - _global_stats['start_time']).total_seconds()
+        elapsed_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+        
+        status_text = "🟢 Monitoring Active" if _global_stats['monitoring'] else "🔴 Monitoring Stopped"
+        
+        alert_text = f"""
+[bold cyan]Alerts Triggered:[/bold cyan] [green]{total_alerts}[/green]
+[bold cyan]Fixtures Monitored:[/bold cyan] [magenta]{fixtures}[/magenta]
+[bold cyan]Conditions Met:[/bold cyan] [yellow]{triggered_count}[/yellow]
+[bold cyan]Elapsed Time:[/bold cyan] [blue]{elapsed_str}[/blue]
+[bold cyan]Status:[/bold cyan] {status_text}
+"""
+    
+    return Panel(alert_text.strip(), title="📈 Summary", border_style="cyan")
+
+
+def _build_dashboard():
+    """Build the complete dashboard layout."""
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header", size=3),
+        Layout(name="body"),
+        Layout(name="footer", size=3)
+    )
+    
+    # Header
+    title = Text("⚽ Football Alert CLI - Live Dashboard", style="bold white")
+    layout["header"].update(Panel(Align.center(title), style="bold blue"))
+    
+    # Body: split into stats table and alerts
+    layout["body"].split_row(
+        Layout(name="stats"),
+        Layout(name="alerts", size=30)
+    )
+    
+    layout["body"]["stats"].update(_build_stats_table())
+    layout["body"]["alerts"].update(_build_alerts_panel())
+    
+    # Footer
+    footer_text = Text("Press Ctrl+C to stop monitoring", style="dim white")
+    layout["footer"].update(Panel(Align.center(footer_text), style="dim"))
+    
+    return layout
+
+
+def run_dashboard_live():
+    """
+    Run the live-updating dashboard using Rich's Live display.
+    This should be called in the main thread before starting monitoring threads.
+    """
+    console = Console()
+    
+    try:
+        with Live(_build_dashboard(), refresh_per_second=2, console=console) as live:
+            # Keep the dashboard running while monitoring is active
+            while _global_stats['monitoring']:
+                live.update(_build_dashboard())
+                time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_monitoring()
+
+
+def start_dashboard_thread():
+    """
+    Start the dashboard in a background thread.
+    Returns the thread object for joining if needed.
+    """
+    dashboard_thread = threading.Thread(target=run_dashboard_live, daemon=False)
+    dashboard_thread.start()
+    return dashboard_thread
