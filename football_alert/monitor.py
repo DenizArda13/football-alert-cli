@@ -1,5 +1,6 @@
 import time
 import threading
+from datetime import datetime
 from collections import defaultdict
 from .api import fetch_match_stats
 from . import dashboard
@@ -190,11 +191,6 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
     # Ensures all threads stop cleanly without blocking
     shutdown_event = threading.Event()
     
-    # Start dashboard in background thread if enabled
-    dashboard_thread = None
-    if use_dashboard:
-        dashboard_thread = dashboard.start_dashboard_thread()
-    
     # One daemon thread per fixture/group for true parallelism
     # Fixes synchronous loop blocking other fixtures
     threads = []
@@ -207,27 +203,45 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
         thread.start()
         threads.append(thread)
     
-    try:
-        # Wait for all threads to complete
-        # Each fixture monitors independently until:
-        # - Alert triggered (all conditions met), OR
-        # - Match finished (90 minutes, some conditions unmet)
-        for thread in threads:
-            thread.join()
+    if use_dashboard:
+        # Run dashboard in main thread (Live display must run in main thread)
+        # But we need to periodically check if all threads are done
+        import sys
+        console = dashboard._console if hasattr(dashboard, '_console') else None
         
-        if not use_dashboard:
+        # Use a non-blocking approach: update dashboard and check threads
+        dashboard._global_stats['monitoring'] = True
+        dashboard._global_stats['start_time'] = datetime.now()
+        dashboard._global_stats['fixtures_count'] = len(unique_fixtures)
+        
+        with dashboard.Live(dashboard._build_dashboard(), refresh_per_second=2, console=dashboard.Console()) as live:
+            try:
+                while dashboard._global_stats['monitoring']:
+                    live.update(dashboard._build_dashboard())
+                    
+                    # Check if all threads are done
+                    all_done = all(not thread.is_alive() for thread in threads)
+                    if all_done:
+                        dashboard._global_stats['monitoring'] = False
+                    
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                shutdown_event.set()
+                dashboard._global_stats['monitoring'] = False
+    else:
+        try:
+            # Wait for all threads to complete
+            # Each fixture monitors independently until:
+            # - Alert triggered (all conditions met), OR
+            # - Match finished (90 minutes, some conditions unmet)
+            for thread in threads:
+                thread.join()
+            
             print("All fixtures finished monitoring. Stopping monitor.")
-        dashboard.stop_monitoring()
-        if dashboard_thread:
-            dashboard_thread.join(timeout=2.0)
-    except KeyboardInterrupt:
-        # Signal shutdown to all threads
-        shutdown_event.set()
-        dashboard.stop_monitoring()
-        # Join with timeout to avoid hang
-        for thread in threads:
-            thread.join(timeout=1.0)
-        if dashboard_thread:
-            dashboard_thread.join(timeout=1.0)
-        if not use_dashboard:
+        except KeyboardInterrupt:
+            # Signal shutdown to all threads
+            shutdown_event.set()
+            # Join with timeout to avoid hang
+            for thread in threads:
+                thread.join(timeout=1.0)
             print("\nMonitoring stopped by user.")
