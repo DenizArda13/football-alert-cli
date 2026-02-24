@@ -19,12 +19,15 @@ from rich.spinner import Spinner
 # Global dashboard state (thread-safe updates via locks)
 _dashboard_lock = threading.Lock()
 _fixture_stats = defaultdict(lambda: {
-    'conditions': [],
-    'current_values': {},
+    'conditions': [],  # List of (stat_name, team_name, target)
+    'current_values': {},  # Dict of team_stat -> current_value
+    'met_conditions': {},  # Dict of (stat, team, target) -> minute_met (or None if not met)
     'alert_triggered': False,
     'alert_time': None,
+    'alert_minute': None,  # Minute when alert was triggered
     'elapsed_minute': 0,
-    'last_update': None
+    'last_update': None,
+    'match_finished': False  # True when elapsed_minute reaches 90
 })
 
 _global_stats = {
@@ -39,6 +42,7 @@ def update_fixture_stat(fixture_id, stat_name, team_name, current_value, target,
     """
     Updates the dashboard state with current fixture statistics.
     Called from the monitoring loop to reflect real-time data.
+    Tracks when conditions are met and stores the minute they were met.
     """
     with _dashboard_lock:
         key = f"{team_name}_{stat_name}"
@@ -46,12 +50,19 @@ def update_fixture_stat(fixture_id, stat_name, team_name, current_value, target,
         _fixture_stats[fixture_id]['elapsed_minute'] = elapsed_minute
         _fixture_stats[fixture_id]['last_update'] = datetime.now()
         
-        # Check if this condition is met
+        # Mark match as finished when elapsed reaches 90
+        if elapsed_minute >= 90:
+            _fixture_stats[fixture_id]['match_finished'] = True
+        
+        # Check if this condition is met and track the minute it was met
+        cond_key = (stat_name, team_name, target)
+        if cond_key not in _fixture_stats[fixture_id]['met_conditions']:
+            _fixture_stats[fixture_id]['met_conditions'][cond_key] = None  # Not met yet
+        
+        # If condition is now met and wasn't before, record the minute
         if current_value is not None and int(current_value) >= target:
-            # Add to conditions if not already there
-            cond_key = (stat_name, team_name, target)
-            if cond_key not in _fixture_stats[fixture_id]['conditions']:
-                _fixture_stats[fixture_id]['conditions'].append(cond_key)
+            if _fixture_stats[fixture_id]['met_conditions'][cond_key] is None:
+                _fixture_stats[fixture_id]['met_conditions'][cond_key] = elapsed_minute
 
 
 def mark_alert_triggered(fixture_id):
@@ -59,6 +70,7 @@ def mark_alert_triggered(fixture_id):
     with _dashboard_lock:
         _fixture_stats[fixture_id]['alert_triggered'] = True
         _fixture_stats[fixture_id]['alert_time'] = datetime.now()
+        _fixture_stats[fixture_id]['alert_minute'] = _fixture_stats[fixture_id]['elapsed_minute']
         _global_stats['total_alerts'] += 1
 
 
@@ -81,6 +93,9 @@ def initialize_conditions(fixture_id, conditions):
             cond_key = (stat_name, team_name, target)
             if cond_key not in _fixture_stats[fixture_id]['conditions']:
                 _fixture_stats[fixture_id]['conditions'].append(cond_key)
+            # Initialize met_conditions tracking for this condition
+            if cond_key not in _fixture_stats[fixture_id]['met_conditions']:
+                _fixture_stats[fixture_id]['met_conditions'][cond_key] = None
 
 
 def stop_monitoring():
@@ -112,23 +127,42 @@ def _build_stats_table():
             for stat_name, team_name, target in data['conditions']:
                 key = f"{team_name}_{stat_name}"
                 current = data['current_values'].get(key, "—")
+                cond_key = (stat_name, team_name, target)
+                minute_met = data['met_conditions'].get(cond_key)
+                match_finished = data['match_finished']
                 
-                # Determine status
+                # Determine status and minute display
                 if data['alert_triggered']:
+                    # Alert was triggered - show ALERT status
                     status = "✅ ALERT"
                     status_style = "green"
-                elif current != "—" and int(current) >= target:
+                    # Show the minute when this condition was met
+                    if minute_met is not None:
+                        minute_str = f"{minute_met}'"
+                    else:
+                        minute_str = f"{data['alert_minute']}'" if data['alert_minute'] else "—"
+                elif minute_met is not None:
+                    # Condition was met but alert not yet triggered (waiting for other conditions)
                     status = "🎯 MET"
                     status_style = "yellow"
+                    minute_str = f"{minute_met}'"
+                elif match_finished:
+                    # Match finished and condition was never met
+                    status = "❌ Unmet"
+                    status_style = "red"
+                    minute_str = "90'"  # Show 90' for unmet conditions at match end
                 else:
+                    # Match still in progress, tracking the condition
                     progress = ""
-                    if current != "—":
-                        pct = min(100, int((int(current) / target) * 100))
-                        progress = f" ({pct}%)"
+                    if current != "—" and target > 0:
+                        try:
+                            pct = min(100, int((int(current) / target) * 100))
+                            progress = f" ({pct}%)"
+                        except (ValueError, TypeError):
+                            pass
                     status = f"⏳ Tracking{progress}"
                     status_style = "cyan"
-                
-                minute_str = f"{data['elapsed_minute']}'" if data['elapsed_minute'] else "—"
+                    minute_str = f"{data['elapsed_minute']}'" if data['elapsed_minute'] else "—"
                 
                 table.add_row(
                     str(fixture_id),
