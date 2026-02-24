@@ -93,6 +93,8 @@ Example concurrent output (new format; one line per fixture):
 
 **Live Terminal Dashboard (Rich UI)**
 Monitor matches with a professional live-updating terminal dashboard powered by the Rich library. Use the `--dashboard` flag to enable it:
+
+**Single Match with Dashboard:**
 ```bash
 football-alert alert \
   --fixture-id 123 --stat Corners --team "Home Team" --target 3 \
@@ -100,14 +102,43 @@ football-alert alert \
   --mock --interval 1 --dashboard
 ```
 
+**Multiple Matches with Dashboard (Mixed Met/Unmet Conditions):**
+Test the dashboard's ability to track multiple fixtures with different outcomes:
+```bash
+football-alert alert \
+  --fixture-id 100 --stat Corners --team "Home Team" --target 1 \
+  --fixture-id 100 --stat Goals --team "Away Team" --target 100 \
+  --fixture-id 200 --stat "Total Shots" --team "Home Team" --target 2 \
+  --mock --interval 1 --dashboard
+```
+
+This example tracks:
+- Fixture 100: Corners (easy target, will be met) + Goals (impossible target, will be unmet at 90')
+- Fixture 200: Total Shots (moderate target, will be met)
+
+The dashboard will display:
+- Fixture 100/Corners: `🎯 MET` at minute ~5'
+- Fixture 100/Goals: `❌ Unmet` at minute 90' (when match finishes)
+- Fixture 200/Shots: `✅ ALERT` when all conditions are met
+
 The dashboard displays:
 - **Live Match Statistics Table**: Shows all tracked conditions with real-time updates
   - Fixture ID, Statistic name, Team, Current value, Target value, Progress status
-  - Status indicators: ⏳ Tracking (with %), 🎯 MET (threshold reached), ✅ ALERT (triggered)
-  - Match minute when threshold was reached
+  - **Status indicators**:
+    - `⏳ Tracking (X%)` - Condition in progress, showing percentage toward target
+    - `🎯 MET` - Threshold reached, shows minute when met
+    - `✅ ALERT` - Alert triggered (all conditions met for fixture), shows minute
+    - `❌ Unmet` - Match finished (90'), condition never met, shows 90'
+  - Match minute when threshold was reached or match ended
 - **Summary Panel**: Key metrics including alerts triggered, fixtures monitored, elapsed time, and monitoring status
 - **Real-time Updates**: Dashboard refreshes 2x per second to reflect live data
 - **Professional UI**: Color-coded output with emojis for easy scanning
+
+**Dashboard Behavior:**
+- Monitoring continues until ALL fixtures either trigger an alert OR reach 90 minutes (match end) with unmet conditions
+- Each fixture is tracked independently in concurrent threads
+- Dashboard updates in real-time as statistics change
+- Graceful shutdown with Ctrl+C
 
 The dashboard is completely optional—omit `--dashboard` to use the original console output with alerts.
 ## Features

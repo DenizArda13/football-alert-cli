@@ -91,23 +91,62 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False, use_das
 def _monitor_fixture(fixture_id, conditions, interval, mock, shutdown_event, use_dashboard=False):
     """
     Private helper for per-fixture monitoring in a dedicated thread.
-    Runs independent loop until conditions met or shutdown.
+    Runs independent loop until:
+    - Alert is triggered (all conditions met), OR
+    - Match finishes (elapsed >= 90 minutes), OR
+    - Shutdown event is set (Ctrl+C)
+    
     Enables true concurrency so fixtures don't block each other.
     Alert printed in exact spec format by check_all_conditions_for_fixture.
     use_dashboard: if True, updates dashboard instead of printing alerts.
     """
     triggered = False
-    while not triggered and not shutdown_event.is_set():
+    match_finished = False
+    
+    while not triggered and not match_finished and not shutdown_event.is_set():
         # check_all_conditions_for_fixture handles AND logic for multi-stat
         # Prints alert on trigger in required format (e.g., with ; for multi-stat)
         if check_all_conditions_for_fixture(fixture_id, conditions, mock, use_dashboard=use_dashboard):
             triggered = True
         else:
+            # Check if match has finished (elapsed >= 90) in dashboard mode
+            if use_dashboard:
+                with dashboard._dashboard_lock:
+                    if fixture_id in dashboard._fixture_stats:
+                        match_finished = dashboard._fixture_stats[fixture_id]['match_finished']
+            
             # Sleep in thread; interruptible via event
             time.sleep(interval)
 
     if shutdown_event.is_set():
         return  # Graceful exit on Ctrl+C
+
+
+def _all_fixtures_done(fixture_ids, use_dashboard=False):
+    """
+    Check if all fixtures are done monitoring.
+    A fixture is done when:
+    - Alert is triggered (all conditions met), OR
+    - Match is finished (elapsed >= 90 minutes)
+    
+    Returns True if all fixtures are done, False otherwise.
+    """
+    if not use_dashboard:
+        # Without dashboard, we can't check status
+        return False
+    
+    with dashboard._dashboard_lock:
+        for fixture_id in fixture_ids:
+            if fixture_id not in dashboard._fixture_stats:
+                return False
+            
+            data = dashboard._fixture_stats[fixture_id]
+            # Fixture is done if alert triggered OR match finished
+            is_done = data['alert_triggered'] or data['match_finished']
+            if not is_done:
+                return False
+    
+    return True
 
 
 def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
@@ -119,6 +158,11 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
     Now includes the match minute (from mock/server progression) when all thresholds are reached for the fixture.
     Each fixture runs in its own thread for independent/non-blocking monitoring (fixes synchronous loop blocking).
     Multi-fixture support is now truly parallel.
+    
+    Monitoring continues until:
+    - ALL fixtures either trigger an alert OR reach match end (90 minutes) with unmet conditions, OR
+    - User presses Ctrl+C for graceful shutdown
+    
     use_dashboard: if True, displays a live-updating Rich terminal dashboard instead of console output.
     """
     # Group configs by fixture_id to enable per-fixture multi-stat AND logic
@@ -164,12 +208,15 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
         threads.append(thread)
     
     try:
-        # Wait for all threads to complete (i.e., all fixtures' alerts triggered)
-        # Non-blocking: each fixture monitors independently
+        # Wait for all threads to complete
+        # Each fixture monitors independently until:
+        # - Alert triggered (all conditions met), OR
+        # - Match finished (90 minutes, some conditions unmet)
         for thread in threads:
             thread.join()
+        
         if not use_dashboard:
-            print("All fixture alerts triggered (all conditions met). Stopping monitor.")
+            print("All fixtures finished monitoring. Stopping monitor.")
         dashboard.stop_monitoring()
         if dashboard_thread:
             dashboard_thread.join(timeout=2.0)
