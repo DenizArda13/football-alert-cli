@@ -12,6 +12,30 @@ from urllib.parse import urlparse, parse_qs
 # Simulates realistic match progression (stats only increase or stabilize)
 _fixture_progress = {}
 
+# Mock fixtures with real team names (6 matches)
+MOCK_FIXTURES = [
+    {"fixture_id": 1001, "home_team": "Manchester City", "away_team": "Liverpool"},
+    {"fixture_id": 1002, "home_team": "Real Madrid", "away_team": "Barcelona"},
+    {"fixture_id": 1003, "home_team": "Bayern Munich", "away_team": "Borussia Dortmund"},
+    {"fixture_id": 1004, "home_team": "Paris Saint-Germain", "away_team": "Marseille"},
+    {"fixture_id": 1005, "home_team": "Juventus", "away_team": "AC Milan"},
+    {"fixture_id": 1006, "home_team": "Arsenal", "away_team": "Chelsea"}
+]
+
+
+def get_mock_fixtures():
+    """Return the list of mock fixtures with real team names."""
+    return list(MOCK_FIXTURES)
+
+
+def _get_fixture_teams(fixture_id):
+    """Resolve fixture team names from the mock fixture list."""
+    fixture_id = str(fixture_id)
+    for fixture in MOCK_FIXTURES:
+        if str(fixture["fixture_id"]) == fixture_id:
+            return fixture["home_team"], fixture["away_team"]
+    return "Home Team", "Away Team"
+
 def generate_mock_stats(fixture_id):
     """
     Generates simulated statistics similar to the original mock.
@@ -42,9 +66,11 @@ def generate_mock_stats(fixture_id):
     # Caps at 90 for realistic full match
     elapsed = min(progress * 5, 90)
 
+    home_team, away_team = _get_fixture_teams(fixture_id)
+
     stats = [
         {
-            "team": {"name": "Home Team"},
+            "team": {"name": home_team},
             "statistics": [
                 {"type": "Corners", "value": base_val},
                 {"type": "Total Shots", "value": base_val + 2},
@@ -52,7 +78,7 @@ def generate_mock_stats(fixture_id):
             ]
         },
         {
-            "team": {"name": "Away Team"},
+            "team": {"name": away_team},
             "statistics": [
                 {"type": "Corners", "value": max(0, base_val - 1)},
                 {"type": "Total Shots", "value": base_val + 1},

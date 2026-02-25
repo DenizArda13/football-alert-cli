@@ -94,6 +94,21 @@ Example concurrent output (new format; one line per fixture):
 **Live Terminal Dashboard (Rich UI)**
 Monitor matches with a professional live-updating terminal dashboard powered by the Rich library. Use the `--dashboard` flag to enable it:
 
+**Interactive Mock Fixture Selection**
+Use the new `--interactive` flag to select from 6 mock fixtures with real team names, then choose match, statistic, team, and target values via prompts. This mode automatically uses mock data.
+
+```bash
+football-alert alert --interactive --dashboard --interval 1
+```
+
+You'll be prompted to:
+- Pick 1+ fixtures from the mock list
+- Choose 1-3 statistics per fixture (Corners, Total Shots, Goals)
+- Select the team for each statistic
+- Enter the target value
+
+The CLI then starts monitoring based on your selections (dashboard optional).
+
 **Single Match with Dashboard:**
 ```bash
 football-alert alert \
@@ -164,7 +179,7 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 
 ## Project Structure
 
-- `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Cumulative stats (fixture_id normalized to str) + elapsed minute for reliable multi-stat/multi-match triggering and "when" (minute) reporting.
+- `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Includes 6 mock fixtures with real team names for interactive selection. Cumulative stats (fixture_id normalized to str) + elapsed minute for reliable multi-stat/multi-match triggering and "when" (minute) reporting.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls); in-memory mock also cumulative and now returns (stats, elapsed) tuple.
 - `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking); alerts now include match minute when all stats thresholds reached. Integrates with dashboard for optional live UI.
 - `football_alert/dashboard.py`: **NEW** Live-updating Rich terminal UI module. Displays real-time statistics, progress tracking, alerts, and monitoring summary. Thread-safe state management for concurrent fixture updates. Optional feature activated via `--dashboard` CLI flag.
