@@ -2,20 +2,48 @@ import click
 from .monitor import start_monitoring
 from .mock_server import get_mock_fixtures
 
-STAT_OPTIONS = ["Corners", "Total Shots", "Goals"]
+STAT_OPTIONS = [
+    "Corners",
+    "Total Shots",
+    "Goals",
+    "Shots on Target",
+    "Fouls Committed",
+    "Offsides",
+    "Possession %",
+    "Pass Accuracy %",
+    "Yellow Cards",
+    "Red Cards",
+    "Tackles",
+    "Interceptions"
+]
+
+
+def _display_options(items, title=""):
+    """Display a numbered list of options."""
+    if title:
+        click.echo(f"\n{title}")
+    for i, item in enumerate(items, 1):
+        click.echo(f"  {i}. {item}")
+
+
+def _prompt_numeric_choice(items, prompt_text):
+    """Prompt user to select from a list by number."""
+    _display_options(items)
+    while True:
+        choice = click.prompt(f"{prompt_text} (enter number)", type=int)
+        if 1 <= choice <= len(items):
+            return items[choice - 1]
+        click.echo(f"Invalid choice. Please enter a number between 1 and {len(items)}.")
 
 
 def _prompt_fixture_choice(fixtures):
-    """Prompt user to select a fixture from the mock list."""
-    choices = [
-        click.Choice([str(fixture["fixture_id"]) for fixture in fixtures], case_sensitive=False)
-    ]
-    fixture_lookup = {str(fixture["fixture_id"]): fixture for fixture in fixtures}
-    fixture_id = click.prompt(
-        "Select fixture ID",
-        type=choices[0]
-    )
-    return fixture_lookup[str(fixture_id)]
+    """Prompt user to select a fixture from the mock list by number."""
+    fixture_display = [f"{f['home_team']} vs {f['away_team']}" for f in fixtures]
+    selected_display = _prompt_numeric_choice(fixture_display, "Select match")
+    for fixture in fixtures:
+        if f"{fixture['home_team']} vs {fixture['away_team']}" == selected_display:
+            return fixture
+    return fixtures[0]  # Fallback (shouldn't reach here)
 
 
 def _prompt_conditions(fixture, count):
@@ -23,16 +51,10 @@ def _prompt_conditions(fixture, count):
     conditions = []
     team_choices = [fixture["home_team"], fixture["away_team"]]
     for idx in range(count):
-        stat_choice = click.prompt(
-            f"Select statistic #{idx + 1}",
-            type=click.Choice(STAT_OPTIONS, case_sensitive=False)
-        )
-        team_choice = click.prompt(
-            f"Select team for {stat_choice}",
-            type=click.Choice(team_choices, case_sensitive=False)
-        )
+        stat_choice = _prompt_numeric_choice(STAT_OPTIONS, f"Select statistic #{idx + 1}")
+        team_choice = _prompt_numeric_choice(team_choices, f"Select team for '{stat_choice}'")
         target_choice = click.prompt(
-            f"Target value for {stat_choice}",
+            f"Target value for {team_choice}'s {stat_choice}",
             type=click.IntRange(1, 99)
         )
         conditions.append({

@@ -94,20 +94,40 @@ Example concurrent output (new format; one line per fixture):
 **Live Terminal Dashboard (Rich UI)**
 Monitor matches with a professional live-updating terminal dashboard powered by the Rich library. Use the `--dashboard` flag to enable it:
 
-**Interactive Mock Fixture Selection**
-Use the new `--interactive` flag to select from 6 mock fixtures with real team names, then choose match, statistic, team, and target values via prompts. This mode automatically uses mock data.
+**Interactive Mock Fixture Selection (Numeric Menu UI)**
+Use the new `--interactive` flag to select from 6 mock fixtures with real team names, then choose match, statistic, team, and target values via an easy-to-use numeric menu. This mode automatically uses mock data.
 
 ```bash
 football-alert alert --interactive --dashboard --interval 1
 ```
 
-You'll be prompted to:
-- Pick 1+ fixtures from the mock list
-- Choose 1-3 statistics per fixture (Corners, Total Shots, Goals)
-- Select the team for each statistic
-- Enter the target value
+Interactive workflow:
+1. **Select fixture(s)**: Choose 1+ matches by number from the 6 available fixtures:
+   - 1001: Manchester City vs Liverpool
+   - 1002: Real Madrid vs Barcelona
+   - 1003: Bayern Munich vs Borussia Dortmund
+   - 1004: Paris Saint-Germain vs Marseille
+   - 1005: Juventus vs AC Milan
+   - 1006: Arsenal vs Chelsea
 
-The CLI then starts monitoring based on your selections (dashboard optional).
+2. **Select statistic(s)**: Choose 1-3 statistics per fixture by number:
+   - 1. Corners
+   - 2. Total Shots
+   - 3. Goals
+   - 4. Shots on Target
+   - 5. Fouls Committed
+   - 6. Offsides
+   - 7. Possession %
+   - 8. Pass Accuracy %
+   - 9. Yellow Cards
+   - 10. Red Cards
+   - 11. Tackles
+   - 12. Interceptions
+
+3. **Select team**: Choose which team (by number) to track the statistic for
+4. **Set target**: Enter the numeric target value (1-99)
+
+The CLI then starts monitoring based on your selections with optional dashboard visualization.
 
 **Single Match with Dashboard:**
 ```bash
@@ -160,7 +180,8 @@ The dashboard is completely optional—omit `--dashboard` to use the original co
 
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats (with fixture ID type normalization for str/int consistency) prevent loops in multi-stat/multi-match cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
 - **Live Terminal Dashboard**: Professional Rich-powered UI for real-time monitoring with color-coded status indicators, progress tracking, and summary metrics. Optional `--dashboard` flag enables live-updating terminal visualization.
-- Tracks stats like Corners, Total Shots, Goals, etc., for home/away teams.
+- **12 Trackable Statistics**: Corners, Total Shots, Goals, Shots on Target, Fouls Committed, Offsides, Possession %, Pass Accuracy %, Yellow Cards, Red Cards, Tackles, Interceptions.
+- **Interactive Numeric Menu UI**: Easy-to-use `--interactive` mode with numbered lists for selecting fixtures, statistics, teams, and targets—no typing required, just enter numbers!
 - **Concurrent multi-match support**: Fixtures monitored in independent threads (non-blocking, true parallelism; fixed for reliable alerts across all fixtures).
 - **Multi-stat per match**: Alerts trigger ONLY when ALL conditions met simultaneously (AND logic for stats in same fixture; independent per fixture). Uses exact new format (e.g., "[Team] reached [Target] [Stat]. ([Min]'); ...").
 - Alerts fire when stat reaches/exceeds target (simple, operator-free) with professional formatting (e.g., "🚨 ALERT: Home Team reached 3 Corners. (15'); Away Team reached 5 Total Shots. (15')").

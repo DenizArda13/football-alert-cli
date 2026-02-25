@@ -74,7 +74,16 @@ def generate_mock_stats(fixture_id):
             "statistics": [
                 {"type": "Corners", "value": base_val},
                 {"type": "Total Shots", "value": base_val + 2},
-                {"type": "Goals", "value": base_val // 3}
+                {"type": "Goals", "value": base_val // 3},
+                {"type": "Shots on Target", "value": base_val + 1},
+                {"type": "Fouls Committed", "value": base_val * 2},
+                {"type": "Offsides", "value": max(0, base_val - 2)},
+                {"type": "Possession %", "value": min(100, base_val * 5 + 30)},
+                {"type": "Pass Accuracy %", "value": min(100, base_val * 3 + 60)},
+                {"type": "Yellow Cards", "value": base_val // 4},
+                {"type": "Red Cards", "value": max(0, base_val // 8)},
+                {"type": "Tackles", "value": base_val * 2 + 5},
+                {"type": "Interceptions", "value": base_val + 3}
             ]
         },
         {
@@ -82,7 +91,16 @@ def generate_mock_stats(fixture_id):
             "statistics": [
                 {"type": "Corners", "value": max(0, base_val - 1)},
                 {"type": "Total Shots", "value": base_val + 1},
-                {"type": "Goals", "value": base_val // 4}
+                {"type": "Goals", "value": base_val // 4},
+                {"type": "Shots on Target", "value": base_val},
+                {"type": "Fouls Committed", "value": base_val * 2 + 1},
+                {"type": "Offsides", "value": max(0, base_val - 3)},
+                {"type": "Possession %", "value": min(100, 100 - (base_val * 5 + 30))},
+                {"type": "Pass Accuracy %", "value": min(100, base_val * 3 + 55)},
+                {"type": "Yellow Cards", "value": base_val // 5},
+                {"type": "Red Cards", "value": max(0, base_val // 10)},
+                {"type": "Tackles", "value": base_val * 2 + 3},
+                {"type": "Interceptions", "value": base_val + 2}
             ]
         }
     ]
