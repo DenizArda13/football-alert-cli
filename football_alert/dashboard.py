@@ -187,14 +187,20 @@ def _build_alerts_panel():
         elapsed = (datetime.now() - _global_stats['start_time']).total_seconds()
         elapsed_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
         
-        status_text = "🟢 Monitoring Active" if _global_stats['monitoring'] else "🔴 Monitoring Stopped"
+        # Determine status based on monitoring flag
+        if _global_stats['monitoring']:
+            status_text = "🟢 Monitoring Active"
+            status_style = "green"
+        else:
+            status_text = "🔴 Monitoring Finished"
+            status_style = "red"
         
         alert_text = f"""
 [bold cyan]Alerts Triggered:[/bold cyan] [green]{total_alerts}[/green]
 [bold cyan]Fixtures Monitored:[/bold cyan] [magenta]{fixtures}[/magenta]
 [bold cyan]Conditions Met:[/bold cyan] [yellow]{triggered_count}[/yellow]
 [bold cyan]Elapsed Time:[/bold cyan] [blue]{elapsed_str}[/blue]
-[bold cyan]Status:[/bold cyan] {status_text}
+[bold cyan]Status:[/bold cyan] [{status_style}]{status_text}[/{status_style}]
 """
     
     return Panel(alert_text.strip(), title="📈 Summary", border_style="cyan")

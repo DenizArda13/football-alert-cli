@@ -228,6 +228,10 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
             except KeyboardInterrupt:
                 shutdown_event.set()
                 dashboard._global_stats['monitoring'] = False
+            finally:
+                dashboard._global_stats['monitoring'] = False
+                live.update(dashboard._build_dashboard())
+                time.sleep(0.1)
     else:
         try:
             # Wait for all threads to complete
