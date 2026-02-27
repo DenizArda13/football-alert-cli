@@ -313,7 +313,7 @@ def show_history():
             # Format conditions
             cond_list = []
             for c in fixture.get("conditions", []):
-                cond_list.append(f"{c['team']} {c['stat']} >= {c['target']}")
+                cond_list.append(f"{c['team']} - {c['stat']} target {c['target']}")
             conds_str = "\n".join(cond_list)
 
             # Format final stats

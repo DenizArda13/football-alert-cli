@@ -176,8 +176,48 @@ The dashboard displays:
 - Graceful shutdown with Ctrl+C
 
 The dashboard is completely optional—omit `--dashboard` to use the original console output with alerts.
+
+## History
+
+The CLI automatically saves tracking session data to a local `history.json` file. Each session records:
+- Timestamp of the monitoring session
+- Fixture IDs tracked
+- Conditions monitored (team, statistic, target value)
+- Final statistics at the end of monitoring
+- Alert status and minute (if triggered)
+
+**View History:**
+```bash
+football-alert history
+```
+
+This displays a professional Rich-powered UI showing all past sessions with:
+- Session timestamp
+- Fixture ID and monitoring status (Alert Triggered, Finished, or Stopped)
+- Conditions tracked for each fixture
+- Final recorded statistics
+- Alert minute when threshold was reached
+
+**History Output Example:**
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                          📜 Football Alert History                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+                        Session 1 - 2026-02-27 16:55:28                         
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Fixture ID ┃ Status         ┃ Conditions            ┃ Final Stats    ┃ Alert Minute ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ 1          │ Alert          │ Home Team - Corners   │ Home           │ 10'          │
+│            │ Triggered      │ target 2              │ Team_Corners:  │              │
+│            │                │                       │ 2              │              │
+└────────────┴────────────────┴───────────────────────┴────────────────┴──────────────┘
+```
+
+The history file (`history.json`) is stored in the current working directory and persists across sessions.
+
 ## Features
 
+- **Session History**: Automatically saves all tracking sessions to `history.json` with full details. View past sessions anytime with `football-alert history` command featuring a professional Rich-powered UI.
 - **Local Mock Server**: Fully replaces RapidAPI to enforce no external network dependencies. Implemented with Python stdlib (`http.server`) only - no extra packages. Cumulative stats (with fixture ID type normalization for str/int consistency) prevent loops in multi-stat/multi-match cases. Now simulates elapsed minute (~5 min per poll, capped at 90) for realistic timing.
 - **Live Terminal Dashboard**: Professional Rich-powered UI for real-time monitoring with color-coded status indicators, progress tracking, and summary metrics. Optional `--dashboard` flag enables live-updating terminal visualization.
 - **12 Trackable Statistics**: Corners, Total Shots, Goals, Shots on Target, Fouls Committed, Offsides, Possession %, Pass Accuracy %, Yellow Cards, Red Cards, Tackles, Interceptions.
@@ -203,8 +243,8 @@ Since the test environment may lack pip/venv, direct Python module testing is us
 - `football_alert/mock_server.py`: Local API mock using only Python stdlib (`http.server`, `threading`, etc.) - no third-party libs. Includes 6 mock fixtures with real team names for interactive selection. Cumulative stats (fixture_id normalized to str) + elapsed minute for reliable multi-stat/multi-match triggering and "when" (minute) reporting.
 - `football_alert/api.py`: Updated to use local server exclusively for network compliance (retains requests for local calls); in-memory mock also cumulative and now returns (stats, elapsed) tuple.
 - `football_alert/monitor.py`: Core monitoring refactored for concurrent threads per fixture (independent, non-blocking); alerts now include match minute when all stats thresholds reached. Integrates with dashboard for optional live UI.
-- `football_alert/dashboard.py`: **NEW** Live-updating Rich terminal UI module. Displays real-time statistics, progress tracking, alerts, and monitoring summary. Thread-safe state management for concurrent fixture updates. Optional feature activated via `--dashboard` CLI flag.
-- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat). Now includes `--dashboard` flag for Rich UI.
+- `football_alert/dashboard.py`: **NEW** Live-updating Rich terminal UI module. Displays real-time statistics, progress tracking, alerts, and monitoring summary. Thread-safe state management for concurrent fixture updates. Includes `show_history()` function for displaying saved session history. Optional feature activated via `--dashboard` CLI flag.
+- `football_alert/cli.py`: CLI entrypoint (backward compatible, updated docs for concurrency/multi-stat). Now includes `--dashboard` flag for Rich UI and `history` command for viewing past sessions.
 - `setup.py`: Updated dependencies to include Rich library for dashboard visualization.
 
 Code is clean, type-hinted where applicable, and modular.
