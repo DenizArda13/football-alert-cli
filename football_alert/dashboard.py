@@ -109,7 +109,7 @@ def stop_monitoring():
 
 def _build_stats_table():
     """Build the main statistics table."""
-    table = Table(title="📊 Live Match Statistics", show_header=True, header_style="bold cyan")
+    table = Table(title="📊 Live Match Statistics", show_header=True, header_style="bold cyan", show_lines=True)
     table.add_column("Fixture ID", style="magenta")
     table.add_column("Stat", style="cyan")
     table.add_column("Team", style="green")
