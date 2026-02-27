@@ -45,8 +45,10 @@ def update_fixture_stat(fixture_id, stat_name, team_name, current_value, target,
     Tracks when conditions are met and stores the minute they were met.
     """
     with _dashboard_lock:
-        key = f"{team_name}_{stat_name}"
-        _fixture_stats[fixture_id]['current_values'][key] = current_value
+        if stat_name and team_name:
+            key = f"{team_name}_{stat_name}"
+            _fixture_stats[fixture_id]['current_values'][key] = current_value
+        
         _fixture_stats[fixture_id]['elapsed_minute'] = elapsed_minute
         _fixture_stats[fixture_id]['last_update'] = datetime.now()
         
@@ -54,15 +56,16 @@ def update_fixture_stat(fixture_id, stat_name, team_name, current_value, target,
         if elapsed_minute >= 90:
             _fixture_stats[fixture_id]['match_finished'] = True
         
-        # Check if this condition is met and track the minute it was met
-        cond_key = (stat_name, team_name, target)
-        if cond_key not in _fixture_stats[fixture_id]['met_conditions']:
-            _fixture_stats[fixture_id]['met_conditions'][cond_key] = None  # Not met yet
-        
-        # If condition is now met and wasn't before, record the minute
-        if current_value is not None and int(current_value) >= target:
-            if _fixture_stats[fixture_id]['met_conditions'][cond_key] is None:
-                _fixture_stats[fixture_id]['met_conditions'][cond_key] = elapsed_minute
+        if stat_name and team_name:
+            # Check if this condition is met and track the minute it was met
+            cond_key = (stat_name, team_name, target)
+            if cond_key not in _fixture_stats[fixture_id]['met_conditions']:
+                _fixture_stats[fixture_id]['met_conditions'][cond_key] = None  # Not met yet
+            
+            # If condition is now met and wasn't before, record the minute
+            if current_value is not None and int(current_value) >= target:
+                if _fixture_stats[fixture_id]['met_conditions'][cond_key] is None:
+                    _fixture_stats[fixture_id]['met_conditions'][cond_key] = elapsed_minute
 
 
 def mark_alert_triggered(fixture_id):
@@ -262,3 +265,81 @@ def start_dashboard_thread():
     dashboard_thread = threading.Thread(target=run_dashboard_live, daemon=False)
     dashboard_thread.start()
     return dashboard_thread
+
+
+def show_history():
+    """Display the session history using Rich."""
+    import json
+    import os
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+
+    console = Console()
+    history_file = "history.json"
+
+    if not os.path.exists(history_file):
+        console.print("[yellow]No history found.[/yellow]")
+        return
+
+    try:
+        with open(history_file, "r") as f:
+            history = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        console.print(f"[red]Error reading history: {e}[/red]")
+        return
+
+    if not history:
+        console.print("[yellow]History is empty.[/yellow]")
+        return
+
+    console.print(Panel(Align.center(Text("📜 Football Alert History", style="bold white")), style="bold blue"))
+
+    for i, session in enumerate(reversed(history), 1):
+        timestamp = session.get("timestamp", "Unknown")
+        dt = datetime.fromisoformat(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        
+        table = Table(title=f"Session {i} - {dt}", show_header=True, header_style="bold cyan", expand=True)
+        table.add_column("Fixture ID", style="magenta")
+        table.add_column("Status", style="white")
+        table.add_column("Conditions", style="cyan")
+        table.add_column("Final Stats", style="yellow")
+        table.add_column("Alert Minute", style="dim")
+
+        for fixture in session.get("fixtures", []):
+            fid = fixture.get("fixture_id", "Unknown")
+            status = fixture.get("status", "Unknown")
+            
+            # Format conditions
+            cond_list = []
+            for c in fixture.get("conditions", []):
+                cond_list.append(f"{c['team']} {c['stat']} >= {c['target']}")
+            conds_str = "\n".join(cond_list)
+
+            # Format final stats
+            stats_list = []
+            for k, v in fixture.get("final_stats", {}).items():
+                stats_list.append(f"{k}: {v}")
+            stats_str = "\n".join(stats_list) if stats_list else "—"
+
+            alert_min = fixture.get("alert_minute")
+            alert_min_str = f"{alert_min}'" if alert_min else "—"
+
+            status_style = "white"
+            if status == "Alert Triggered":
+                status_style = "green"
+            elif status == "Finished":
+                status_style = "blue"
+            elif status == "Stopped":
+                status_style = "yellow"
+
+            table.add_row(
+                str(fid),
+                Text(status, style=status_style),
+                conds_str,
+                stats_str,
+                alert_min_str
+            )
+        
+        console.print(table)
+        console.print("\n")

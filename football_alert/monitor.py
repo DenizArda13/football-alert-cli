@@ -1,9 +1,61 @@
 import time
 import threading
+import json
+import os
 from datetime import datetime
 from collections import defaultdict
 from .api import fetch_match_stats
 from . import dashboard
+
+def _save_history(groups, use_dashboard=False):
+    """
+    Saves the session data to history.json.
+    Includes fixture details, conditions, and whether they were met.
+    """
+    history_file = "history.json"
+    session_data = {
+        "timestamp": datetime.now().isoformat(),
+        "fixtures": []
+    }
+
+    for fixture_id, conditions in groups.items():
+        fixture_entry = {
+            "fixture_id": fixture_id,
+            "conditions": conditions,
+            "status": "Unknown",
+            "alert_triggered": False,
+            "alert_minute": None,
+            "final_stats": {}
+        }
+
+        # Try to get data from dashboard (now always updated for history)
+        with dashboard._dashboard_lock:
+            if fixture_id in dashboard._fixture_stats:
+                data = dashboard._fixture_stats[fixture_id]
+                fixture_entry["alert_triggered"] = data["alert_triggered"]
+                fixture_entry["alert_minute"] = data["alert_minute"]
+                fixture_entry["status"] = "Alert Triggered" if data["alert_triggered"] else ("Finished" if data["match_finished"] else "Stopped")
+                fixture_entry["final_stats"] = data["current_values"]
+        
+        session_data["fixtures"].append(fixture_entry)
+
+    history = []
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, "r") as f:
+                history = json.load(f)
+                if not isinstance(history, list):
+                    history = []
+        except (json.JSONDecodeError, IOError):
+            history = []
+
+    history.append(session_data)
+    
+    try:
+        with open(history_file, "w") as f:
+            json.dump(history, f, indent=4)
+    except IOError as e:
+        print(f"Error saving history: {e}")
 
 def check_single_fixture(fixture_id, stat_name, team_name, target, mock=False):
     """
@@ -37,6 +89,11 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False, use_das
     if not stats:
         return False
 
+    # Always update dashboard data (even if not using live display) for history saving
+    dashboard.update_fixture_stat(
+        fixture_id, None, None, None, None, elapsed
+    )
+
     all_met = True
     alert_parts = []
 
@@ -54,11 +111,12 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False, use_das
                         current_value = stat['value']
                         if current_value is None:
                             continue
-                        # Update dashboard with current stat (if enabled)
-                        if use_dashboard:
-                            dashboard.update_fixture_stat(
-                                fixture_id, stat_name, team_name, current_value, target, elapsed
-                            )
+                        
+                        # Always update dashboard state for history tracking
+                        dashboard.update_fixture_stat(
+                            fixture_id, stat_name, team_name, current_value, target, elapsed
+                        )
+
                         # Logic: Reach or Exceed (current_value >= target still)
                         if int(current_value) >= target:
                             condition_met = True
@@ -74,6 +132,8 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False, use_das
         if not condition_met:
             all_met = False
             # Continue checking others for potential (but don't early return)
+            # However, we should still update dashboard with current value if possible
+            # (Already done in the loop above if team/stat matched)
 
     if all_met:
         # EXACT required format: "🚨 ALERT: " + parts joined by "; " (one line, even for multi-stat)
@@ -81,9 +141,11 @@ def check_all_conditions_for_fixture(fixture_id, conditions, mock=False, use_das
         # Minute is per-fixture (captured at poll when ALL met); no fixture ID or extra text.
         # Fulfills spec for single/multi-stat/multi-match cases.
         alert_details = '; '.join(alert_parts)
-        if use_dashboard:
-            dashboard.mark_alert_triggered(fixture_id)
-        else:
+        
+        # Always mark alert triggered in dashboard state for history
+        dashboard.mark_alert_triggered(fixture_id)
+        
+        if not use_dashboard:
             print(f"🚨 ALERT: {alert_details}")
         return True
     return False
@@ -232,6 +294,7 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
                 dashboard._global_stats['monitoring'] = False
                 live.update(dashboard._build_dashboard())
                 time.sleep(0.1)
+        _save_history(groups, use_dashboard=use_dashboard)
     else:
         try:
             # Wait for all threads to complete
@@ -242,6 +305,7 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
                 thread.join()
             
             print("All fixtures finished monitoring. Stopping monitor.")
+            _save_history(groups, use_dashboard=use_dashboard)
         except KeyboardInterrupt:
             # Signal shutdown to all threads
             shutdown_event.set()
@@ -249,3 +313,4 @@ def start_monitoring(configs, interval=60, mock=False, use_dashboard=False):
             for thread in threads:
                 thread.join(timeout=1.0)
             print("\nMonitoring stopped by user.")
+            _save_history(groups, use_dashboard=use_dashboard)

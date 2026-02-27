@@ -5,6 +5,7 @@ football_alert/api.py
 football_alert/cli.py
 football_alert/dashboard.py
 football_alert/fixture_generator.py
+football_alert/history.py
 football_alert/mock_server.py
 football_alert/monitor.py
 football_alert.egg-info/PKG-INFO

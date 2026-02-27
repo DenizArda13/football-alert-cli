@@ -154,5 +154,11 @@ def alert(fixture_id, stat, team, target, interval, mock, dashboard, interactive
 
     start_monitoring(configs, interval, mock, use_dashboard=dashboard)
 
+@main.command()
+def history():
+    """Display tracking history."""
+    from .dashboard import show_history
+    show_history()
+
 if __name__ == '__main__':
     main()
